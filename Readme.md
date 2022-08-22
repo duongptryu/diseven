@@ -1,0 +1,1 @@
+# Lib support put key in distributed status and query multi key in redis cluster
