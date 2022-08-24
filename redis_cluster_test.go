@@ -29,7 +29,7 @@ func init() {
 	})
 
 	redisDbKVWrite = redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: addrHostsWrite,
+		Addrs:        addrHostsWrite,
 		DialTimeout:  10 * time.Second,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -38,33 +38,35 @@ func init() {
 	})
 
 	// check Redis
-	//if redisDbKVRead.Incr(context.Background(), "REDIS_PING").Val() <= 0 {
-	//	log.Fatalln("redisDbKVRead not valid")
-	//}
-	//
-	//if redisDbKVWrite.Incr(context.Background(), "REDIS_PING").Val() <= 0 {
-	//	log.Fatalln("redisDbKVWrite not valid")
-	//}
+	if redisDbKVRead.Incr(context.Background(), "REDIS_PING").Val() <= 0 {
+		log.Fatalln("redisDbKVRead not valid")
+	}
+
+	if redisDbKVWrite.Incr(context.Background(), "REDIS_PING").Val() <= 0 {
+		log.Fatalln("redisDbKVWrite not valid")
+	}
 
 	log.Println("Connected to redis cluster")
 }
 
 func Test(t *testing.T) {
-	if err := redisDbKVWrite.Set(ctx, "key", "value", 0).Err(); err != nil {
+	d := mustNewDisEvent(3)
+	keyHashTag := d.GenKeyWithHashTag(fmt.Sprintf("key1"))
+	if err := redisDbKVWrite.MSet(ctx, keyHashTag, "value").Err(); err != nil {
 		t.Error(err)
 		return
 	}
 
-	assert.Equal(t, "value", redisDbKVRead.Get(ctx, "key").Val())
+	assert.Equal(t, "value", redisDbKVRead.Get(ctx, keyHashTag).Val())
 	log.Println("Set Success")
 }
 
 func BenchmarkPutKey(b *testing.B) {
 	d := mustNewDisEvent(3)
 	var num = 0
-	for num < 10000 {
+	for num < 100000 {
 		keyHashTag := d.GenKeyWithHashTag(fmt.Sprintf("key%d", num))
-		if err := redisDbKVWrite.MSet(ctx, keyHashTag, fmt.Sprintf("key%d", num), 0).Err(); err != nil {
+		if err := redisDbKVWrite.MSet(ctx, keyHashTag, fmt.Sprintf("value%d", num)).Err(); err != nil {
 			b.Error(err)
 			return
 		}
@@ -76,17 +78,17 @@ func BenchmarkGetKey(b *testing.B) {
 	d := mustNewDisEvent(3)
 	var num = 0
 	var keys []string
-	for num < 10000 {
+	for num < 100000 {
 		keys = append(keys, fmt.Sprintf("key%d", num))
 		num++
 	}
 	objectKeyHash := d.GetMultiKeyQuery(keys)
-	for _, v := range objectKeyHash {
+	for k, v := range objectKeyHash {
+		fmt.Printf("Query multi key with hash tag %v \n", int(k))
 		resp := redisDbKVRead.MGet(ctx, v...)
 		if err := resp.Err(); err != nil {
 			b.Error(err)
 			continue
 		}
-		log.Println(resp.Val())
 	}
 }
